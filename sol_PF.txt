@@ -1,0 +1,9 @@
+function y = sol_PF(x)
+global Lab
+global Lbc
+global Lcd
+global Lda
+global cranck_angle
+y(1) = Lab*cos(cranck_angle) + Lbc*cos(x(1)) + Lcd*cos(x(2)) - Lda;
+y(2) = Lab*sin(cranck_angle) + Lbc*sin(x(1)) + Lcd*sin(x(2));
+end

@@ -1,0 +1,164 @@
+% Información Conocida
+global Lab
+global Lbc
+global Lcd
+global Lda
+global cranck_angle
+
+Lab = 4183.417/1000; % Cranck Length (m)
+Lbc = 1143/1000; % Coupler Length (m)
+Lcd = 4712.396/1000; % Rocker Length (m)
+Lda = 611.11/1000; % Ground Length (m)
+theta_ab = 0:1:360; % Cranck Angle Vector (°) 
+theta_ab = theta_ab*pi/180; % Cranck Angle Vector (rad)
+w_ab = 10; % rad/s
+alpha_ab = 0; %rad/s2
+
+m_cranck = 1003.554; %kg
+m_rocker = 1127.831; %kg
+m_coupler = 306.598; %kg
+Ig_cranck = 8467000; %kg m2
+Ig_rocker = 2995000; %kg m2
+Ig_coupler = 950300; %kg m2
+
+P = [0;-24167.7114];%N
+Rb = [0;-12084000];%N
+Rc = [0;-12083000];%N
+
+
+
+
+% Solución al Problema
+seed = [333*pi/180,206] %Valor Semilla
+for i = 1:1:361
+    cranck_angle = theta_ab(i);
+    [x, fval, info] = fsolve(@sol_PF,seed);
+    theta_bc(i) = x(1); % Coupler Angle (rad)
+    theta_cd(i) = x(2); 
+    
+    seed = [x(1),x(2)]; %Valor Semilla
+     
+    e_ab = [cos(theta_ab(i));sin(theta_ab(i))]; % Vector Columna*
+    e_bc = [cos(theta_bc(i));sin(theta_bc(i))]; % Vector Columna*
+    e_cd = [cos(theta_cd(i));sin(theta_cd(i))]; % Vector Columna*
+    
+    
+    n_ab = [-sin(theta_ab(i));cos(theta_ab(i))]; % Vector Columna*
+    n_bc = [-sin(theta_bc(i));cos(theta_bc(i))]; % Vector Columna*
+    n_cd = [-sin(theta_cd(i));cos(theta_cd(i))]; % Vector Columna*
+    
+    
+    % Solución del "Estado de Velocidades"
+    A1 = [Lbc*n_bc, Lcd*n_cd]; % Vector Fila*
+    b1 = [-w_ab*Lab*n_ab]; 
+    x = A1\b1;
+    w_bc(i) = x(1);
+    w_cd(i) = x(2);
+    
+    
+      % Velocidad Punto C
+      Vc(:,i) = w_ab*Lab*n_ab + w_bc(i)*Lbc*n_bc;
+      
+      % Velocidad Punto B
+      Vb(:,i) = w_cd(i)*Lcd*n_cd + w_bc(i)*Lbc*n_bc;
+    
+    % Solución del "Estado de Aceleraciones"
+    A2 = A1; % Vector Fila*
+    b2 = [-alpha_ab.*Lab.*n_ab + ((w_ab).^2).*Lab.*e_ab + ((w_bc(i)).^2).*Lbc.*e_bc + ((w_cd(i)).^2).*Lcd.*e_cd];
+    x = A2\b2;
+    alpha_bc(i) = x(1);
+    alpha_cd(i) = x(2);
+    
+      % Aceleración Punto C
+      Ac(:,i) = alpha_ab*Lab*n_ab - ((w_ab).^2)*Lab*e_ab + alpha_bc(i)*Lbc*n_bc - ((w_bc(i)).^2)*Lbc*e_bc;
+      
+      % Aceleración Punto B
+      Ab(:,i) = alpha_cd(i)*Lcd*n_cd - ((w_cd(i)).^2)*Lcd*e_cd + alpha_bc(i)*Lbc*n_bc - ((w_bc(i)).^2)*Lbc*e_bc;
+
+      
+      % Par motor
+      Vg_Cranck(:,i) = 1/2*(w_ab*Lab*n_ab);
+      Ag_cranck(:,i) = 1/2*(alpha_ab*Lab*n_ab - ((w_ab)^2)*Lab*e_ab);
+      Vg_Rocker(:,i) = w_ab*Lab*n_ab + w_bc(i)*Lbc*n_bc + 1/2*(w_cd(i)*Lcd*n_cd);
+      Ag_Rocker(:,i) = (alpha_ab*Lab*n_ab - (w_ab)^2*Lab*e_ab) + (alpha_bc(i)*Lbc*n_bc - (w_bc(i))^2*Lbc*e_bc) + 1/2*(alpha_cd(i)*Lcd*n_cd - (w_cd(i))^2*Lcd*e_cd);
+      Vg_Coupler(:,i) = w_ab*Lab*n_ab + 1/2*w_bc(i)*Lbc*n_bc;
+      Ag_Coupler(:,i) = alpha_ab*Lab*n_ab - (w_ab)^2*Lab*e_ab + 1/2*(alpha_bc(i)*Lbc*n_bc - (w_bc(i))^2*Lbc*e_bc) ;
+      TL(i) = 1/w_ab*(m_cranck*dot(Vg_Cranck(:,i),Ag_cranck(:,i)) + Ig_cranck*w_ab*alpha_ab + m_rocker*dot(Vg_Rocker(:,i),Ag_Rocker(:,i)) + Ig_rocker*w_cd(i)*alpha_cd(i) + m_coupler*dot( Vg_Coupler(:,i), Ag_Coupler(:,i)) + Ig_coupler*w_bc(i)*alpha_bc(i) - dot(Rb,Vb(:,i))- dot(Rc,Vc(:,i)));
+      
+end
+
+% Postprocesamiento 
+figure(1)
+hold on
+grid on
+set(gca,'FontSize',20)
+xlabel('Crank Angle (°)')
+ylabel('Velocidad Punto C (mm/s)')
+xlim([0 360])
+plot(theta_ab*180/pi,Vc(1,:),'color','r','lineWidth',4)
+plot(theta_ab*180/pi,Vc(2,:),'color','b','lineWidth',4)
+legend('Vx','Vy')
+
+figure(2)
+hold on
+grid on
+set(gca,'FontSize',20)
+xlabel('Crank Angle (°)')
+ylabel('Aceleración Punto C (mm/s^2)')
+xlim([0 360])
+plot(theta_ab*180/pi,Ac(1,:),'color','r','lineWidth',4) 
+plot(theta_ab*180/pi,Ac(2,:),'color','b','lineWidth',4) 
+legend('Ax','Ay')
+
+figure(3)
+hold on
+grid on
+set(gca,'FontSize',20)
+xlabel('Crank Angle (°)')
+ylabel('Velocidad Punto B (mm/s)')
+xlim([0 360])
+plot(theta_ab*180/pi,Vb(1,:),'color','r','lineWidth',4)
+plot(theta_ab*180/pi,Vb(2,:),'color','b','lineWidth',4)
+legend('Vx','Vy')
+
+figure(4)
+hold on
+grid on
+set(gca,'FontSize',20)
+xlabel('Crank Angle (°)')
+ylabel('Aceleración Punto B (mm/s^2)')
+xlim([0 360])
+plot(theta_ab*180/pi,Ab(1,:),'color','r','lineWidth',4) 
+plot(theta_ab*180/pi,Ab(2,:),'color','b','lineWidth',4) 
+legend('Ax','Ay')
+
+figure(5)
+hold on
+grid on
+set(gca,'FontSize',20)
+xlabel('Crank Angle (°)')
+ylabel('Par Motor (N m)')
+xlim([0 360])
+plot(theta_ab*180/pi,TL,'color','b','lineWidth',4)
+
+%Par Motor Promedio
+    Tm = trapz(theta_ab, TL)/(theta_ab(361)-theta_ab(1));
+    Tm = ones(1,361)*Tm;
+    T = TL - Tm;
+    %zeros = find(abs(T)<0.01)
+    T1(1,:)=T(1,1:34);
+    theta1(1,:)=theta_ab(1,1:34);
+    A1 = trapz(theta1, T1);
+    
+    T2(1,:)=T(1,324:361);
+    theta2(1,:)=theta_ab(1,324:361);
+    A2 = trapz(theta2, T2);
+    
+    figure(6)
+    hold on
+    grid on
+    set(gca,'FontSize',20)
+    xlabel('Crank Angle (°)')
+    ylabel('Par Neto (N m)')
+    xlim([0 360])
+    plot(theta_ab*180/pi,T,'color','b','lineWidth',4)
